@@ -12,6 +12,7 @@
 #include <thread>
 #include <memory>
 #include <cstring>
+#include <mutex>
 
 using namespace std;
 
@@ -55,6 +56,9 @@ public:
 };
 
 
+thread_local size_t kick_num_l;
+thread_local size_t kick_path_len_accumulate_l;
+
 class lockFreeCuckoo {
 private:
     Entry *cursor;
@@ -62,6 +66,17 @@ private:
     static const int SECOND = 1;
     static const int NIL = -1;
     // static const char *NP = (char *) 0;
+
+
+    //statistical info
+    size_t kv_num;
+    double occupancy;
+    size_t kick_num;
+    size_t kick_path_len_accumulate;
+    double avg_path_len;
+
+    mutex statistic_mtx;
+
 public:
     std::atomic<Entry *> *table1;
     std::atomic<Entry *> *table2;
@@ -88,6 +103,9 @@ public:
 
     void ensureCapacity(uint32_t capacity);    // resize
     void printTable();
+
+    void merge_info();
+    void cal_info_and_show();
 
 private:
     void init();
@@ -155,6 +173,12 @@ bool checkCounter(int ctr1, int ctr2, int ctrs1, int ctrs2) {
 
 
 lockFreeCuckoo::lockFreeCuckoo(size_t size1, size_t size2) : t1Size(size1), t2Size(size2) {
+    kv_num = 0;
+    occupancy = 0.0;
+    kick_num = 0;
+    kick_path_len_accumulate = 0;
+    avg_path_len = 0.0;
+
     table1 = new std::atomic<Entry *>[size1];
     table2 = new std::atomic<Entry *>[size2];
     cursor = NULL;
@@ -380,7 +404,7 @@ Entry *lockFreeCuckoo::Search(const char * key,uint32_t key_len) {
         Entry *ent2 = atomic_load_explicit(&table2[h2], memory_order_relaxed);
         cnt2 = get_cnt(ent2);
         ent2 = extract_address(ent2);
-        if (ent2 != NULL && !compare_(ent1->key,ent1->k_len ,key, key_len))
+        if (ent2 != NULL && !compare_(ent2->key,ent2->k_len ,key, key_len))
             return ent2;
 
         // 2nd round
@@ -392,7 +416,7 @@ Entry *lockFreeCuckoo::Search(const char * key,uint32_t key_len) {
         ent2 = atomic_load_explicit(&table2[h2], memory_order_relaxed);
         ncnt2 = get_cnt(ent2);
         ent2 = extract_address(ent2);
-        if (ent2 != NULL && !compare_(ent1->key,ent1->k_len ,key, key_len))
+        if (ent2 != NULL && !compare_(ent2->key,ent2->k_len ,key, key_len))
             return ent2;
 
         if (checkCounter(cnt1, cnt2, ncnt1, ncnt2))
@@ -487,7 +511,9 @@ int lockFreeCuckoo::Find(const char * key,uint32_t key_len, Entry **ent1, Entry 
 
 
 bool lockFreeCuckoo::Relocate(int which, int index) {
-    int threshold = t1Size + t2Size;
+    ++kick_num_l;
+
+    int threshold = 1000;
     int route[threshold]; // store cuckoo path
     int startLevel = 0, tblNum = which;
     char * key;
@@ -569,6 +595,7 @@ bool lockFreeCuckoo::Relocate(int which, int index) {
             helpRelocate(tblNum, idx, true);
         }
     }
+    kick_path_len_accumulate_l += depth;
     return found;
 }
 
@@ -848,6 +875,40 @@ void lockFreeCuckoo::ensureCapacity(uint32_t capacity) {
 
     delete oldTable1;
     delete oldTable2;
+}
+
+void lockFreeCuckoo::merge_info() {
+    statistic_mtx.lock();
+    kick_num += kick_num_l;
+    kick_path_len_accumulate += kick_path_len_accumulate_l;
+    statistic_mtx.unlock();
+}
+
+void lockFreeCuckoo::cal_info_and_show(){
+    statistic_mtx.lock();
+    size_t tmp = 0;
+    for(size_t i = 0; i < t1Size; i++ ){
+        if(extract_address(table1[i].load()) != nullptr){
+            ++tmp;
+        }
+    }
+    for(size_t i = 0; i < t2Size; i++ ){
+        if(extract_address(table2[i].load()) != nullptr){
+            ++tmp;
+        }
+    }
+    kv_num = tmp;
+    occupancy = kv_num * 1.0 / (t1Size + t2Size);
+
+    avg_path_len = kick_path_len_accumulate * 1.0 / kick_num;
+
+    cout<<"kv in table "<<kv_num<<endl;
+    cout<<"occupancy "<<occupancy<<endl;
+    cout<<"kick num "<<kick_num<<endl;
+    cout<<"average kick path length "<<avg_path_len<<endl;
+    cout<< "   ------------  "<<endl;
+
+    statistic_mtx.unlock();
 }
 
 #endif //HASHCOMP_LOCKFREECUCKOO_H

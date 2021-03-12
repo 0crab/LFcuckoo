@@ -145,6 +145,8 @@ inline void merge_log() {
     __sync_fetch_and_add(&erase_success, erase_success_l);
     __sync_fetch_and_add(&erase_failure, erase_failure_l);
     __sync_fetch_and_add(&read_add_g, read_add_l);
+
+
 }
 
 
@@ -285,6 +287,7 @@ void insert_worker(int tid){
     __sync_fetch_and_add(&insert_success, insert_success_l);
     __sync_fetch_and_add(&insert_failure, insert_failure_l);
 
+    store->merge_info();
 }
 
 void worker(int tid) {
@@ -425,6 +428,8 @@ int main(int argc, char **argv) {
 
 //    ASSERT(store.check_unique(),"key not unique!");
 //    ASSERT(store.check_nolock(),"there are still locks in map!");
+
+    store->cal_info_and_show();
 
     show_info_after();
 
