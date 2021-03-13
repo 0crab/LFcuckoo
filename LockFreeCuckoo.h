@@ -16,22 +16,6 @@
 
 using namespace std;
 
-/*---------------------------------------------------------------------------*/
-
-/*template<class KeyType>
-class DefaultKeyComparator {
-public:
-// Compare a and b. Return a negative value if a is less than b, 0 if they
-// are equal, and a positive value if a is greater than b
-    // virtual int operator()(const KeyType &a, const KeyType &b) const = 0;
-    int operator()(const KeyType &a, const KeyType &b) const {
-        if (a < b)
-            return -1;
-        if (a == b)
-            return 0;
-        return 1;
-    }
-};*/
 
 class StrComparator {
 public:
@@ -57,6 +41,7 @@ public:
 
 
 thread_local size_t kick_num_l;
+thread_local size_t max_path_len_l;
 thread_local size_t kick_path_len_accumulate_l;
 
 class lockFreeCuckoo {
@@ -72,6 +57,7 @@ private:
     size_t kv_num;
     double occupancy;
     size_t kick_num;
+    size_t max_path_len;
     size_t kick_path_len_accumulate;
     double avg_path_len;
 
@@ -176,6 +162,7 @@ lockFreeCuckoo::lockFreeCuckoo(size_t size1, size_t size2) : t1Size(size1), t2Si
     kv_num = 0;
     occupancy = 0.0;
     kick_num = 0;
+    max_path_len = 0;
     kick_path_len_accumulate = 0;
     avg_path_len = 0.0;
 
@@ -513,7 +500,7 @@ int lockFreeCuckoo::Find(const char * key,uint32_t key_len, Entry **ent1, Entry 
 bool lockFreeCuckoo::Relocate(int which, int index) {
     ++kick_num_l;
 
-    int threshold = 1000;
+    int threshold = 10000;
     int route[threshold]; // store cuckoo path
     int startLevel = 0, tblNum = which;
     char * key;
@@ -595,6 +582,7 @@ bool lockFreeCuckoo::Relocate(int which, int index) {
             helpRelocate(tblNum, idx, true);
         }
     }
+    if(depth > max_path_len_l) max_path_len_l = depth;
     kick_path_len_accumulate_l += depth;
     return found;
 }
@@ -663,6 +651,7 @@ bool lockFreeCuckoo::Insert( const char *key ,uint32_t key_len,const char *addre
             else
                 continue;
         }
+
         bool relocateResult = Relocate(FIRST, h1);
         if (relocateResult == true) {
             continue;
@@ -879,6 +868,7 @@ void lockFreeCuckoo::ensureCapacity(uint32_t capacity) {
 
 void lockFreeCuckoo::merge_info() {
     statistic_mtx.lock();
+    if(max_path_len_l > max_path_len) max_path_len = max_path_len_l;
     kick_num += kick_num_l;
     kick_path_len_accumulate += kick_path_len_accumulate_l;
     statistic_mtx.unlock();
@@ -905,6 +895,7 @@ void lockFreeCuckoo::cal_info_and_show(){
     cout<<"kv in table "<<kv_num<<endl;
     cout<<"occupancy "<<occupancy<<endl;
     cout<<"kick num "<<kick_num<<endl;
+    cout<<"max path length "<<max_path_len<<endl;
     cout<<"average kick path length "<<avg_path_len<<endl;
     cout<< "   ------------  "<<endl;
 
