@@ -50,7 +50,7 @@ typedef struct Request {
 };
 
 Request *requests;
-Request *loads;
+//Request *loads;
 std::vector<YCSB_request *> ycsb_loads;
 std::vector<YCSB_request *> ycsb_requests;
 
@@ -371,6 +371,50 @@ void show_info_before();
 void show_info_after();
 void prepare();
 
+
+void kick_test(){
+    uint64_t k1 = 172046561ll;
+    uint64_t k2 = 2653590574ll;
+    uint64_t k3 = 6497310948ll;
+    uint64_t k4 = 6174611380ll;
+
+    Request req1,req2,req3,req4;
+
+    req1.key = (char * )calloc(1,8);
+    *(uint64_t *)req1.key = k1;
+    req1.key_len = 8;
+    req1.value = (char * )calloc(1,8);
+    *(uint64_t *)req1.value = k1;
+    req1.value_len = 8;
+
+    req2.key = (char * )calloc(1,8);
+    *(uint64_t *)req2.key = k2;
+    req2.key_len = 8;
+    req2.value = (char * )calloc(1,8);
+    *(uint64_t *)req2.value = k2;
+    req2.value_len = 8;
+
+    req3.key = (char * )calloc(1,8);
+    *(uint64_t *)req3.key = k3;
+    req3.key_len = 8;
+    req3.value = (char * )calloc(1,8);
+    *(uint64_t *)req3.value = k3;
+    req3.value_len = 8;
+
+    req4.key = (char * )calloc(1,8);
+    *(uint64_t *)req4.key = k4;
+    req4.key_len = 8;
+    req4.value = (char * )calloc(1,8);
+    *(uint64_t *)req4.value = k4;
+    req4.value_len = 8;
+
+    store->Insert(req1.key,req1.key_len,req1.value,req1.value_len);
+    store->Insert(req2.key,req2.key_len,req2.value,req2.value_len);
+    store->Insert(req3.key,req3.key_len,req3.value,req3.value_len);
+    store->Insert(req4.key,req4.key_len,req4.value,req4.value_len);
+
+}
+
 int main(int argc, char **argv) {
     if (argc == 10) {
         insert_thread_num = std::atol(argv[1]);
@@ -406,6 +450,8 @@ int main(int argc, char **argv) {
 
     store = new LFCuckooHash(init_size1, init_size2);
 
+    kick_test();
+    return 0;
 
     prepare();
 
