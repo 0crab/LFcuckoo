@@ -654,13 +654,13 @@ bool lockFreeCuckoo::Insert( const char *key ,uint32_t key_len,const char *addre
                 continue;
         }
 
-        ent1 = extract_address(ent1);
-        ent2 = extract_address(ent2);
+//        ent1 = extract_address(ent1);
+//        ent2 = extract_address(ent2);
 
-        char * ent2_key = ent2->key;
-        uint32_t tmp_index = hash1(ent2_key,8);
-        Entry * tmp_ent1 = table1[tmp_index].load();
-        tmp_ent1 = extract_address(tmp_ent1);
+//        char * ent2_key = ent2->key;
+//        uint32_t tmp_index = hash1(ent2_key,8);
+//        Entry * tmp_ent1 = table1[tmp_index].load();
+//        tmp_ent1 = extract_address(tmp_ent1);
 
         bool relocateResult = Relocate(FIRST, h1);
         if (relocateResult == true) {

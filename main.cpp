@@ -27,6 +27,9 @@ typedef lockFreeCuckoo LFCuckooHash;
 
 LFCuckooHash * store;
 
+
+ThreadBarrier *tb;
+
 static const int op_type_num = 4;
 enum Op_type {
     Find = 0,
@@ -298,6 +301,8 @@ void worker(int tid) {
     size_t num = tid == thread_num -1 ?  step + total_count % thread_num : step;
     size_t base = tid * step;
 
+    tb->threadWait();
+
     Tracer t;
     t.startTime();
 
@@ -323,7 +328,61 @@ void worker(int tid) {
     runtimelist[tid] = t.getRunTime();
 }
 
+void worker_insert_rm(int tid) {
 
+    size_t step =  total_count / thread_num;
+
+    size_t num = tid == thread_num -1 ?  step + total_count % thread_num : step;
+    size_t base = tid * step;
+
+    tb->threadWait();
+
+    bool insert_round = true;
+    size_t insert_round_count = 0;
+    size_t rm_round_count = 0;
+
+    Tracer t;
+    t.startTime();
+
+    while (stopMeasure.load(std::memory_order_relaxed) == 0) {
+        if(insert_round)
+            insert_round_count++;
+        else
+            rm_round_count++;
+
+        for (size_t i = 0; i < total_count ; i++) {
+            Request & req = requests[i];
+            if(insert_round){
+                if (store->Insert(req.key, req.key_len, req.value, req.value_len)) {
+                    insert_success_l++;
+                } else {
+                    insert_failure_l++;
+                }
+            }else{
+                if (store->Delete(req.key, req.key_len)) {
+                    erase_success_l++;
+                } else {
+                    erase_failure_l++;
+                }
+            }
+        }
+
+        insert_round = !insert_round;
+
+        __sync_fetch_and_add(&op_num, total_count);
+
+        uint64_t tmptruntime = t.fetchTime();
+        if (tmptruntime / 1000000 >= timer_range) {
+            stopMeasure.store(1, memory_order_relaxed);
+        }
+    }
+
+    merge_log();
+    runtimelist[tid] = t.getRunTime();
+
+    cout <<" insert round "<< insert_round_count<<endl;
+    cout <<" rm round "<< rm_round_count<<endl;
+}
 
 void prepare(){
 
@@ -372,48 +431,50 @@ void show_info_after();
 void prepare();
 
 
-void kick_test(){
-    uint64_t k1 = 172046561ll;
-    uint64_t k2 = 2653590574ll;
-    uint64_t k3 = 6497310948ll;
-    uint64_t k4 = 6174611380ll;
+//void kick_test(){
+//    uint64_t k1 = 172046561ll;
+//    uint64_t k2 = 2653590574ll;
+//    uint64_t k3 = 6497310948ll;
+//    uint64_t k4 = 6174611380ll;
+//
+//    Request req1,req2,req3,req4;
+//
+//    req1.key = (char * )calloc(1,8);
+//    *(uint64_t *)req1.key = k1;
+//    req1.key_len = 8;
+//    req1.value = (char * )calloc(1,8);
+//    *(uint64_t *)req1.value = k1;
+//    req1.value_len = 8;
+//
+//    req2.key = (char * )calloc(1,8);
+//    *(uint64_t *)req2.key = k2;
+//    req2.key_len = 8;
+//    req2.value = (char * )calloc(1,8);
+//    *(uint64_t *)req2.value = k2;
+//    req2.value_len = 8;
+//
+//    req3.key = (char * )calloc(1,8);
+//    *(uint64_t *)req3.key = k3;
+//    req3.key_len = 8;
+//    req3.value = (char * )calloc(1,8);
+//    *(uint64_t *)req3.value = k3;
+//    req3.value_len = 8;
+//
+//    req4.key = (char * )calloc(1,8);
+//    *(uint64_t *)req4.key = k4;
+//    req4.key_len = 8;
+//    req4.value = (char * )calloc(1,8);
+//    *(uint64_t *)req4.value = k4;
+//    req4.value_len = 8;
+//
+//    store->Insert(req1.key,req1.key_len,req1.value,req1.value_len);
+//    store->Insert(req2.key,req2.key_len,req2.value,req2.value_len);
+//    store->Insert(req3.key,req3.key_len,req3.value,req3.value_len);
+//    store->Insert(req4.key,req4.key_len,req4.value,req4.value_len);
+//
+//}
 
-    Request req1,req2,req3,req4;
 
-    req1.key = (char * )calloc(1,8);
-    *(uint64_t *)req1.key = k1;
-    req1.key_len = 8;
-    req1.value = (char * )calloc(1,8);
-    *(uint64_t *)req1.value = k1;
-    req1.value_len = 8;
-
-    req2.key = (char * )calloc(1,8);
-    *(uint64_t *)req2.key = k2;
-    req2.key_len = 8;
-    req2.value = (char * )calloc(1,8);
-    *(uint64_t *)req2.value = k2;
-    req2.value_len = 8;
-
-    req3.key = (char * )calloc(1,8);
-    *(uint64_t *)req3.key = k3;
-    req3.key_len = 8;
-    req3.value = (char * )calloc(1,8);
-    *(uint64_t *)req3.value = k3;
-    req3.value_len = 8;
-
-    req4.key = (char * )calloc(1,8);
-    *(uint64_t *)req4.key = k4;
-    req4.key_len = 8;
-    req4.value = (char * )calloc(1,8);
-    *(uint64_t *)req4.value = k4;
-    req4.value_len = 8;
-
-    store->Insert(req1.key,req1.key_len,req1.value,req1.value_len);
-    store->Insert(req2.key,req2.key_len,req2.value,req2.value_len);
-    store->Insert(req3.key,req3.key_len,req3.value,req3.value_len);
-    store->Insert(req4.key,req4.key_len,req4.value,req4.value_len);
-
-}
 
 int main(int argc, char **argv) {
     if (argc == 10) {
@@ -450,18 +511,20 @@ int main(int argc, char **argv) {
 
     store = new LFCuckooHash(init_size1, init_size2);
 
-    kick_test();
-    return 0;
+    tb = new ThreadBarrier(thread_num);
+
+//    kick_test();
+//    return 0;
 
     prepare();
 
-    std::vector<std::thread> insert_threads;
-    for (int i = 0; i < insert_thread_num; i++) insert_threads.emplace_back(std::thread(insert_worker, i));
-    for (int i = 0; i < insert_thread_num; i++) insert_threads[i].join();
+//    std::vector<std::thread> insert_threads;
+//    for (int i = 0; i < insert_thread_num; i++) insert_threads.emplace_back(std::thread(insert_worker, i));
+//    for (int i = 0; i < insert_thread_num; i++) insert_threads[i].join();
+//
+//    show_info_insert();
 
-    show_info_insert();
-
-    if(!YCSB) std::random_shuffle(requests, requests + total_count);
+//    if(!YCSB) std::random_shuffle(requests, requests + total_count);
 
 //    ASSERT(store.check_unique(),"key not unique!");
 //    ASSERT(store.check_nolock(),"there are still locks in map!");
@@ -469,7 +532,8 @@ int main(int argc, char **argv) {
     runtimelist = new uint64_t[thread_num]();
 
     std::vector<std::thread> threads;
-    for (int i = 0; i < thread_num; i++) threads.emplace_back(std::thread(worker, i));
+    for (int i = 0; i < thread_num -1 ; i++) threads.emplace_back(std::thread(worker, i));
+    threads.emplace_back(std::thread(worker_insert_rm, thread_num -1));
     for (int i = 0; i < thread_num; i++) threads[i].join();
 
 //    ASSERT(store.check_unique(),"key not unique!");
